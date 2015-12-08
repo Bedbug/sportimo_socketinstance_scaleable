@@ -58,13 +58,12 @@ redisclient.subscribe("socketServers");
 
 redisclient.on("message", function (channel, message) {
     if(message=="ping") {
-        //console.log(process.pid+": Main Server heartbeat");
+        console.log(process.pid+": Main Server heartbeat");
         return;
     }
 
-
-
     console.log(message);
+
     if(LogStatus>0) {
         var parsedobj = JSON.parse(message);
 
@@ -141,7 +140,7 @@ function LOG(s)
 var io = new WebSocketServer({server: server});
 
 io.broadcast = function(data) {
-    //console.log("Clients: "+ this.clients.length+" | "+JSON.stringify(data));
+    console.log("Clients: "+ this.clients.length+" | "+JSON.stringify(data));
     
     for (var i in this.clients)
         this.clients[i].send(data);
