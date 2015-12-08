@@ -1,0 +1,25 @@
+{
+  "name": "socketServer1",
+  "subdomain": "arisbrink-socket1",
+  "scripts": {
+    "start": "node app.js"
+  },
+  "version": "0.0.22",
+  "dependencies": {
+    "express": "",
+    "eventemitter3": "",
+    "body-parser": "",
+    "ws": ""
+  },
+  "engines": {
+    "node": "0.10.x"
+  },
+  "bundledDependencies": [
+    "body-parser",
+    "eventemitter3",
+    "express",
+    "redis",
+    "ws"
+  ],
+  "os": "sunos"
+}
