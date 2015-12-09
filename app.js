@@ -25,16 +25,16 @@
 
  */
 
-
-var RedisIP = 'angelfish.redistogo.com';
-var RedisPort = 9455;
-var RedisAuth = 'd8deecf088b01d686f7f7cbfd11e96a9';
+var redisCreds = { url: 'clingfish.redistogo.com', port: 9307, secret: '075bc004e0e54a4a738c081bf92bc61d', channel: "socketServers" };
+//var RedisIP = 'angelfish.redistogo.com';
+//var RedisPort = 9455;
+//var RedisAuth = 'd8deecf088b01d686f7f7cbfd11e96a9';
 
 // Initialize and connect to the Redis datastore
 var redis = require('redis');
-var redisclient = redis.createClient(RedisPort, RedisIP);
+var redisclient = redis.createClient(redisCreds.port, redisCreds.url);
 
-redisclient.auth(RedisAuth, function (err) {
+redisclient.auth(redisCreds.secret, function (err) {
     if (err) { throw err; }
 });
 
@@ -58,11 +58,11 @@ redisclient.subscribe("socketServers");
 
 redisclient.on("message", function (channel, message) {
     if(message=="ping") {
-        console.log(process.pid+": Main Server heartbeat");
+        //console.log(process.pid+": Main Server heartbeat");
         return;
     }
 
-    console.log(message);
+
 
     if(LogStatus>0) {
         var parsedobj = JSON.parse(message);
@@ -72,7 +72,7 @@ redisclient.on("message", function (channel, message) {
         if(parsedobj.data)
             obj= parsedobj.data;
 
-
+        console.log(obj);
 
         if(obj.event == "user_subscribed"){
              for(var i = 0; i<users.length; i++)
@@ -140,7 +140,7 @@ function LOG(s)
 var io = new WebSocketServer({server: server});
 
 io.broadcast = function(data) {
-    console.log("Clients: "+ this.clients.length+" | "+JSON.stringify(data));
+   // console.log("Clients: "+ this.clients.length+" | "+JSON.stringify(data));
     
     for (var i in this.clients)
         this.clients[i].send(data);
