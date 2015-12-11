@@ -57,56 +57,46 @@ redisclient.on("end", function () {
 redisclient.subscribe("socketServers");
 
 redisclient.on("message", function (channel, message) {
-    if(message=="ping") {
-        //console.log(process.pid+": Main Server heartbeat");
+
+    var mess = JSON.parse(message);
+
+    if(mess.server) {
+        //console.log(process.pid+": "+mess.server);
         return;
+    }else {
+
+        //var parsedobj = JSON.parse(message);
+        //
+        //var obj = {event: null};
+        //if (parsedobj.data)
+        //    obj = parsedobj.data;
+
+        io.broadcast(message);
     }
 
+    //    if(obj.event == "user_subscribed"){
+    //         for(var i = 0; i<users.length; i++)
+    //         {
+    //             if(users[i].userid == obj.id){
+    //             users[i].socket.send(JSON.stringify({message:"You are logged out because someone else logged in with your account"}));
+    //              users[i].socket.send(JSON.stringify({logout:true}));
+    //             }
+    //         }
+    //        return;
+    //    }
+    //
+    //
+    //    //  console.log(obj)
+    //
+    //    if(obj.event=="new_game_event")
+    //        console.log(process.pid+": BroadCasting: "+ obj.data.match_id+" | "+ obj.data.minute +"' "+ obj.data.event_name);
+    //    else if(obj.event == "message")
+    //        console.log(process.pid+": BroadCasting: "+ obj.data.match_id+" | Message");
+    //    else if(obj.event == "custom_questions")
+    //        console.log(process.pid+": BroadCasting: "+ obj.data.match_id+" | Game Question");
+    //}
 
 
-    if(LogStatus>0) {
-        var parsedobj = JSON.parse(message);
-
-
-        var obj = {event:null};
-        if(parsedobj.data)
-            obj= parsedobj.data;
-
-        console.log(obj);
-
-        if(obj.event == "user_subscribed"){
-             for(var i = 0; i<users.length; i++)
-             {
-                 if(users[i].userid == obj.id){
-                 users[i].socket.send(JSON.stringify({message:"You are logged out because someone else logged in with your account"}));
-                  users[i].socket.send(JSON.stringify({logout:true}));
-                 }
-             }
-            return;
-        }
-
-
-        //  console.log(obj)
-
-        if(obj.event=="new_game_event")
-            console.log(process.pid+": BroadCasting: "+ obj.data.match_id+" | "+ obj.data.minute +"' "+ obj.data.event_name);
-        else if(obj.event == "message")
-            console.log(process.pid+": BroadCasting: "+ obj.data.match_id+" | Message");
-        else if(obj.event == "custom_questions")
-            console.log(process.pid+": BroadCasting: "+ obj.data.match_id+" | Game Question");
-    }
-//{"id":18,"data":"{\"data\":{\"match_id\":203,\"home_score\":0,\"player2_name\":\"\",\"away_score\":2,\"which_half\":1,\"minute\":58,\"id\":\"1194\",\"team_logo\":\"al-ahly-120.png\",\"event_id\":1,\"event_name\":\"Goal\",\"player_name\":\"Abdel-Fadil\"},\"event\":\"new_game_event\"}"}
-    // var obj = JSON.parse(message);
-
-    // lastEventID++;
-    // var evtData = {
-    //     id: lastEventID,
-    //     data: obj
-    // };
-
-    // // Change The Last Event of The Match
-    // ActiveGames[obj.data.match_id] = evtData;
-    io.broadcast(message);
 });
 
 // {"id":1,"data":"{\"id\":6,\"data\":\"{\\\"data\\\":{\\\"match_id\\\":202,\\\"home_score\\\":1,\\\"player2_name\\\":\\\"\\\",\\\"away_score\\\":0,\\\"which_half\\\":2,\\\"minute\\\":64,\\\"id\\\":\\\"1183\\\",\\\"team_logo\\\":\\\"th_BM.png\\\",\\\"event_id\\\":1,\\\"event_name\\\":\\\"Goal\\\",\\\"player_name\\\":\\\"Afobe (own)\\\"},\\\"event\\\":\\\"new_game_event\\\"}\"}"}
