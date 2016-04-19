@@ -25,6 +25,8 @@
 
  */
 
+var _ = require('lodash');
+
 var redisCreds = { url: 'clingfish.redistogo.com', port: 9307, secret: '075bc004e0e54a4a738c081bf92bc61d', channel: "socketServers" };
 //var RedisIP = 'angelfish.redistogo.com';
 //var RedisPort = 9455;
@@ -34,6 +36,15 @@ var redisCreds = { url: 'clingfish.redistogo.com', port: 9307, secret: '075bc004
 var redis = require('redis');
 var redisclient = redis.createClient(redisCreds.port, redisCreds.url);
 
+var PublishChannel = null;
+PublishChannel = redis.createClient(redisCreds.port, redisCreds.url);
+PublishChannel.auth(redisCreds.secret, function (err) {
+    if (err) {
+        console.log(err);
+    }
+});
+
+
 redisclient.auth(redisCreds.secret, function (err) {
     if (err) { throw err; }
 });
@@ -42,11 +53,11 @@ redisclient.on("error", function (err) {
     LOG("{''Error'': ''" + err + "''}");
 });
 
-redisclient.on("subscribe", function(channel,count){
+redisclient.on("subscribe", function (channel, count) {
     LOG("SOCKET INSTANCE subscribed to PUB/SUB channel");
 });
 
-redisclient.on("unsubscribe", function(channel,count){
+redisclient.on("unsubscribe", function (channel, count) {
     LOG("SOCKET unsubscribed from PUB/SUB channel");
 });
 
@@ -56,23 +67,43 @@ redisclient.on("end", function () {
 
 redisclient.subscribe("socketServers");
 
-redisclient.on("message", function (channel, message) {
+redisclient.on("message", function (channel, data) {
 
-    var mess = JSON.parse(message);
-
-    if(mess.server) {
-        //console.log(process.pid+": "+mess.server);
-        return;
-    }else {
-
-        //var parsedobj = JSON.parse(message);
-        //
-        //var obj = {event: null};
-        //if (parsedobj.data)
-        //    obj = parsedobj.data;
-
-        io.broadcast(message);
+    // Establishing payload
+    var message = {};
+    try {
+        message = JSON.parse(data);
     }
+    catch (err) {
+        message = data;
+    }
+
+    if (message.server) return;
+    // console.log(message);
+    // Should the message be distributed by web sockets?
+    if (message.sockets) {
+        var payload = message.payload;
+
+        // Is the payload directed to specific user?
+        if (payload.client) {
+            var evalUser = findUser(payload.client);
+            if (evaluser)
+                evalUser.wss.send(payload);
+        }
+        else
+            io.broadcast(payload);
+
+    }
+    else {
+        var payload = message.payload;
+        // If we received a command from another instance to disconnect user with the provided id
+        if (payload.type == "disconnect_user" && payload.data.pid != process.pid) {
+            var evalUser = findUser(payload.data.uid);
+            if (evalUser)
+                DisconnectUser(evalUser);
+        }
+    }
+
 
     //    if(obj.event == "user_subscribed"){
     //         for(var i = 0; i<users.length; i++)
@@ -118,113 +149,143 @@ var lastEventID = 0;
 var LogStatus = 2;
 var ActiveGames = {};
 
-function LOG(s)
-{
-    if(LogStatus > 1)
-        console.log(new Date()+"["+process.pid+"]: "+s);
+function LOG(s) {
+    if (LogStatus > 1)
+        console.log(new Date() + "[" + process.pid + "]: " + s);
 }
 
 //-------------------------------------
 //  Web Sockets / Notification System
 //-------------------------------------
-var io = new WebSocketServer({server: server});
+var io = new WebSocketServer({ server: server });
 
-io.broadcast = function(data) {
-   // console.log("Clients: "+ this.clients.length+" | "+JSON.stringify(data));
-    
+
+// wss.broadcast = function broadcast(data) {
+//   wss.clients.forEach(function each(client) {
+//     client.send(data);
+//   });
+// };
+
+io.broadcast = function (data) {
+    // console.log("Clients: "+ this.clients.length+" | "+JSON.stringify(data));
+
     for (var i in this.clients)
         this.clients[i].send(data);
 };
 
+io.on('connection', function (socket) {
 
+    var user;
+    console.log("Connected");
 
-    io.on('connection', function(socket) {
+    socket.on('register', function (data, callback) {
 
-        var user = addUser();
+        user = findUser(data.uid);
+        console.log(user);
 
-        // Heartbeat
-        //var heartbeatTimeout;
-        //
-        //function sendHeartbeat () {
-        //    if(socket){
-        //        socket.send(JSON.stringify({users:users.length}));
-        //        heartbeatTimeout = setTimeout(sendHeartbeat, 60000);
-        //    }
-        //}
-
-        LOG("A user has connected");
-
-        socket.on('subscribe', function (data,callback) {
-            // Register user to to match channel
-            
-            if(user.userID == -1) LOG("This userid is empty");
-            LOG(user.userID + " subscribed to:" + data.room);
-            user.channelID = data.room;
-
-            if (data.room > 0) {
-                var evtData = {
-                    event: "user_subscribed",
-                    id: user.userID
-                };
-                redisclient.publish("socketServers", JSON.stringify(evtData));
-             }
-        });
-
-        socket.on('unsubscribe', function (data){
-            // Unregister user from match channel;
-            LOG(user.userID+" unsubscribed from:"+ data.room);
-            user.channelID = 0;
-        });
-
-        socket.on('close', function () {
-            LOG("Client disconected");
-            //clearTimeout(heartbeatTimeout);
-            removeUser(user);
-            //ChannelEntry.remove(user,function(err) { LOG("error:"+err); })
-        });
-
-        socket.on("message", function(data){
-
-            var parsedData = JSON.parse(data);
-
-            if(parsedData.id)
-            {
-                // for(var i = 0; i<users.length; i++)
-                // {
-                //     if(users[i].userid == parsedData.id){
-                //     users[i].socket.send(JSON.stringify({message:"You are logged out because someone else logged in with your account"}));
-                //      users[i].socket.send(JSON.stringify({logout:true}));
-                //      //users[i].socket.disconnect();
-                //     }
-                // }
-
-                user.userID = parsedData.id;
-
-                //sendHeartbeat();
-                LOG("Registered user in server with ID: "+ user.userID);
-
+        if (!user) {
+            user = {
+                uid: data.uid,
+                uname: data.uname,
+                wss: socket
             }
-            else if(parsedData.subscribe)
-            {
-                user.channelID = parsedData.subscribe;
 
-                LOG(user.userID+" subscribed to: "+user.channelID);
-            }
-            else if (parsedData.unsubscribe)
-            {
-                LOG(user.userID+" unsubscribed from: "+ user.channelID);
-                user.channelID = 0;
+            instUsers.push(user);
+        }
 
+        var evtData =
+            {
+                sockets: true,
+                payload: {
+                    type: "user_subscribed",
+                    pid: process.pid,
+                    id: user.uid
+                }
             }
-            //      else if(parsedData.disconnect)
-            //         {
-            //             removeUser(user);
-            //          socket.disconnect();
-            //         }
-        });
+
+        PublishChannel.publish("socketServers", JSON.stringify(evtData));
+        LOG("A user with id: " + user.uid + " has registered in this sockets Instance.");
     });
 
-app.get('/', function(req, res, next) {
+    socket.on('subscribe', function (data, callback) {
+        user.room = data.room;
+        LOG(user.uid + " subscribed to:" + data.room);
+    });
+
+    socket.on('unsubscribe', function (data) {
+        // Unregister user from match channel;
+        LOG(user.userID + " unsubscribed from:" + data.room);
+        user.channelID = 0;
+    });
+
+    socket.on('close', function () {
+        LOG("Client disconected");
+
+        if (user)
+            removeUser(user);
+
+    });
+
+    socket.on("message", function (data) {
+
+        // Establishing payload
+        var payload = {};
+        try {
+            payload = JSON.parse(data);
+        }
+        catch (err) {
+            payload = data;
+        }
+
+        // If the request is for registration
+        if (payload.register) {
+
+            var userExists = findUser(payload.register.uid);
+
+            if (userExists) {
+                DisconnectUser(userExists);
+            }
+            else {
+                var evtData = {
+                    sockets: false,
+                    payload: {
+                        type: "disconnect_user",
+                        data: {
+                            pid: process.pid,
+                            id: payload.register.uid
+                        }
+                    }
+                }
+                PublishChannel.publish("socketServers", JSON.stringify(evtData));
+            }
+
+
+            // Register the new user
+            user = {
+                uid: payload.register.uid,
+                uname: payload.register.uname,
+                room: "Lobby",
+                wss: socket
+            }
+
+            instUsers.push(user);
+
+
+        }
+        else if (payload.subscribe) {
+            // console.log(user);
+            user.room = payload.subscribe.room;
+            LOG(user.uid + " subscribed to:" + user.room);
+        }
+        else if (payload.unsubscribe) {
+            LOG(user.uid + " unsubscribed from: " + user.room);
+            user.room = "Lobby";
+        }
+
+    });
+});
+
+app.get('/', function (req, res, next) {
     res.send(200, "All set");
 });
 
@@ -234,32 +295,49 @@ app.get('/', function(req, res, next) {
 //----------------------------------------
 //              Users
 //----------------------------------------
-var users = [];
-var usersCount = 0;
-var addUser = function() {
-    usersCount++; // Helps iding the user on remove
-    var user = {};
-    user.index = usersCount;
-    user.userID = -1;
-    users.push(user);
-    return user;
+var instUsers = [];
+
+var DisconnectUser = function (user) {
+    var json = JSON.stringify({
+        type: "disconnect_user",
+        client: user.uid,
+        data: { "message": { "en": "You logged in from another device. We are sorry but you can only have one active connection." } }
+    });
+
+    user.wss.send(json);
+    user.wss.close(1008, "Duplicate connection found");
+    removeUser(user);
+}
+
+var findUser = function (id) {
+    return _.find(instUsers, { uid: id });
+}
+
+var removeUser = function (user) {
+    LOG("Removed user: " + user.uid);
+    instUsers = _.without(instUsers, user);
+
 };
 
-var removeUser = function(user) {
+// Heartbeat with stats
+var heartbeatTimeout = setInterval(sendHeartbeat, 30000);
 
-    for(var i=0; i<users.length; i++) {
-        if(user.index === users[i].index) {
-            LOG("removed user: "+users[i].userID+ " with index: "+user.index);
-            users.splice(i, 1);
-            return;
-        }
+
+function sendHeartbeat() {
+    var roomCount = _.countBy(instUsers, function (obj) {
+        return obj.room;
+    });
+
+    var result = _.map(roomCount, function (value, key) {
+        return { room: String(key), count: value };
+    });
+
+    var stats = {
+        instance: process.pid,
+        connections: io.clients.length,
+        rooms: result
     }
-};
 
-// Heartbeat
-var heartbeatTimeout = setInterval(sendHeartbeat, 20000);
-
-function sendHeartbeat () {
-    if(io && users)
-        io.broadcast(JSON.stringify({users:users.length}));
+    if (io && instUsers)
+        io.broadcast(JSON.stringify(stats));
 }

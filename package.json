@@ -6,9 +6,10 @@
   },
   "version": "0.0.22",
   "dependencies": {
-    "express": "",
-    "eventemitter3": "",
     "body-parser": "",
+    "eventemitter3": "",
+    "express": "",
+    "lodash": "4.11.1",
     "ws": ""
   },
   "engines": {
