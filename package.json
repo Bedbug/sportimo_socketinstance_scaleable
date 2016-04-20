@@ -12,15 +12,12 @@
     "lodash": "4.11.1",
     "ws": ""
   },
-  "engines": {
-    "node": "0.10.x"
-  },
+ 
   "bundledDependencies": [
     "body-parser",
     "eventemitter3",
     "express",
     "redis",
     "ws"
-  ],
-  "os": "sunos"
+  ]
 }

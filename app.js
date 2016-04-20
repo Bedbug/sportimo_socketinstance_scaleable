@@ -27,6 +27,9 @@
 
 var _ = require('lodash');
 
+var InstId = process.env.SERVO_ID ? process.env.SERVO_ID : process.pid;
+
+
 var redisCreds = { url: 'clingfish.redistogo.com', port: 9307, secret: '075bc004e0e54a4a738c081bf92bc61d', channel: "socketServers" };
 //var RedisIP = 'angelfish.redistogo.com';
 //var RedisPort = 9455;
@@ -78,8 +81,10 @@ redisclient.on("message", function (channel, data) {
         message = data;
     }
 
-    if (message.server) return;
-    // console.log(message);
+    if (message.server) {
+        return;
+    }
+
     // Should the message be distributed by web sockets?
     if (message.sockets) {
         var payload = message.payload;
@@ -91,47 +96,22 @@ redisclient.on("message", function (channel, data) {
                 evalUser.wss.send(payload);
         }
         else
-            io.broadcast(payload);
+            io.broadcast(JSON.stringify(payload), message.admin);
 
     }
     else {
         var payload = message.payload;
         // If we received a command from another instance to disconnect user with the provided id
-        if (payload.type == "disconnect_user" && payload.data.pid != process.pid) {
+
+        if (payload.type == "disconnect_user" && payload.data.pid != InstId) {
+            // console.log(payload)
             var evalUser = findUser(payload.data.uid);
             if (evalUser)
                 DisconnectUser(evalUser);
         }
     }
 
-
-    //    if(obj.event == "user_subscribed"){
-    //         for(var i = 0; i<users.length; i++)
-    //         {
-    //             if(users[i].userid == obj.id){
-    //             users[i].socket.send(JSON.stringify({message:"You are logged out because someone else logged in with your account"}));
-    //              users[i].socket.send(JSON.stringify({logout:true}));
-    //             }
-    //         }
-    //        return;
-    //    }
-    //
-    //
-    //    //  console.log(obj)
-    //
-    //    if(obj.event=="new_game_event")
-    //        console.log(process.pid+": BroadCasting: "+ obj.data.match_id+" | "+ obj.data.minute +"' "+ obj.data.event_name);
-    //    else if(obj.event == "message")
-    //        console.log(process.pid+": BroadCasting: "+ obj.data.match_id+" | Message");
-    //    else if(obj.event == "custom_questions")
-    //        console.log(process.pid+": BroadCasting: "+ obj.data.match_id+" | Game Question");
-    //}
-
-
 });
-
-// {"id":1,"data":"{\"id\":6,\"data\":\"{\\\"data\\\":{\\\"match_id\\\":202,\\\"home_score\\\":1,\\\"player2_name\\\":\\\"\\\",\\\"away_score\\\":0,\\\"which_half\\\":2,\\\"minute\\\":64,\\\"id\\\":\\\"1183\\\",\\\"team_logo\\\":\\\"th_BM.png\\\",\\\"event_id\\\":1,\\\"event_name\\\":\\\"Goal\\\",\\\"player_name\\\":\\\"Afobe (own)\\\"},\\\"event\\\":\\\"new_game_event\\\"}\"}"}
-
 
 var WebSocketServer = require('ws').Server,
     http = require('http'),
@@ -160,28 +140,28 @@ function LOG(s) {
 var io = new WebSocketServer({ server: server });
 
 
-// wss.broadcast = function broadcast(data) {
-//   wss.clients.forEach(function each(client) {
-//     client.send(data);
-//   });
-// };
+io.broadcast = function (data, admin) {
 
-io.broadcast = function (data) {
-    // console.log("Clients: "+ this.clients.length+" | "+JSON.stringify(data));
+    _.each(instUsers, function (user) {
+        if (admin != null) {
+            if (user.admin == admin)
+                user.wss.send(data);
+        }
+        else
+            user.wss.send(data);
+    })
 
-    for (var i in this.clients)
-        this.clients[i].send(data);
 };
 
 io.on('connection', function (socket) {
 
     var user;
-    console.log("Connected");
+    // console.log("Connected");
 
     socket.on('register', function (data, callback) {
 
         user = findUser(data.uid);
-        console.log(user);
+        // console.log(user);
 
         if (!user) {
             user = {
@@ -189,6 +169,9 @@ io.on('connection', function (socket) {
                 uname: data.uname,
                 wss: socket
             }
+
+            if (data.admin) user.admin = true;
+            else user.admin = false;
 
             instUsers.push(user);
         }
@@ -198,8 +181,8 @@ io.on('connection', function (socket) {
                 sockets: true,
                 payload: {
                     type: "user_subscribed",
-                    pid: process.pid,
-                    id: user.uid
+                    pid: InstId,
+                    uid: user.uid
                 }
             }
 
@@ -237,6 +220,25 @@ io.on('connection', function (socket) {
             payload = data;
         }
 
+        if (payload.test) {
+            console.log("Initiating Test:")
+            setTimeout(function () {
+                 console.log("Start:")
+                var evtData = {
+                    sockets: true,
+                    client: user.uid,
+                    payload: {
+                        time: new Date()
+                    }
+                }
+
+                for (var i = 0; i < 2000; i++) {
+                    evtData.payload.index = i;
+                    PublishChannel.publish("socketServers", JSON.stringify(evtData));
+                }
+            }, 2000);
+        }
+        // console.log(payload);
         // If the request is for registration
         if (payload.register) {
 
@@ -245,27 +247,41 @@ io.on('connection', function (socket) {
             if (userExists) {
                 DisconnectUser(userExists);
             }
-            else {
-                var evtData = {
-                    sockets: false,
-                    payload: {
-                        type: "disconnect_user",
-                        data: {
-                            pid: process.pid,
-                            id: payload.register.uid
-                        }
+
+            var evtData = {
+                sockets: false,
+                payload: {
+                    type: "disconnect_user",
+                    data: {
+                        pid: InstId,
+                        uid: payload.register.uid
                     }
                 }
-                PublishChannel.publish("socketServers", JSON.stringify(evtData));
             }
 
+            PublishChannel.publish("socketServers", JSON.stringify(evtData));
 
-            // Register the new user
-            user = {
-                uid: payload.register.uid,
-                uname: payload.register.uname,
-                room: "Lobby",
-                wss: socket
+
+            if (payload.register.admin) {
+                // Register the new user
+                user = {
+                    uid: payload.register.uid,
+                    uname: payload.register.uname,
+                    room: "Administration",
+                    admin: true,
+                    wss: socket
+                }
+                LOG("Administrator " + user.uname + " with id: " + user.uid + " has been registered to this instance")
+            }
+            else {
+                user = {
+                    uid: payload.register.uid,
+                    uname: payload.register.uname,
+                    room: "Lobby",
+                    admin: false,
+                    wss: socket
+                }
+                LOG("User with id: " + user.uid + " has been registered to this instance")
             }
 
             instUsers.push(user);
@@ -320,7 +336,7 @@ var removeUser = function (user) {
 };
 
 // Heartbeat with stats
-var heartbeatTimeout = setInterval(sendHeartbeat, 30000);
+var heartbeatTimeout = setInterval(sendHeartbeat, 20000);
 
 
 function sendHeartbeat() {
@@ -333,11 +349,24 @@ function sendHeartbeat() {
     });
 
     var stats = {
-        instance: process.pid,
+        instance: InstId,
         connections: io.clients.length,
         rooms: result
     }
 
     if (io && instUsers)
-        io.broadcast(JSON.stringify(stats));
+        io.broadcast(JSON.stringify(stats), false);
+
+    var redisData = {
+        sockets: true,
+        // share this to all socket instances and to clients which are flagged admin
+        admin: true,
+        payload: {
+            type: "socket_stats",
+            system: true,
+            data: stats
+        }
+    }
+
+    PublishChannel.publish("socketServers", JSON.stringify(redisData));
 }
