@@ -30,7 +30,8 @@ var _ = require('lodash');
 var InstId = process.env.SERVO_ID ? process.env.SERVO_ID : process.pid;
 
 
-var redisCreds = { url: 'clingfish.redistogo.com', port: 9307, secret: '075bc004e0e54a4a738c081bf92bc61d', channel: "socketServers" };
+// var redisCreds = { url: 'clingfish.redistogo.com', port: 9307, secret: '075bc004e0e54a4a738c081bf92bc61d', channel: "socketServers" };
+var redisCreds = require('./config/redisConfig');
 //var RedisIP = 'angelfish.redistogo.com';
 //var RedisPort = 9455;
 //var RedisAuth = 'd8deecf088b01d686f7f7cbfd11e96a9';
