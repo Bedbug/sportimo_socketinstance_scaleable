@@ -319,12 +319,12 @@ io.on('connection', function (socket) {
             LOG(user.uid + " subscribed to:" + user.room);
             
             // Update Activities and Stats
-            userActivities.findOneAndUpdate({ userid: uid, room: user.room }, { $set: { visited: Date.now, isPresent: true } }, { upsert: true });
+            userActivities.findOneAndUpdate({ user: uid, room: user.room }, { $set: { visited: Date.now, isPresent: true } }, { upsert: true });
             userStats.UpsertStat(uid ,{ matchesVisited: 1 }, null);
         }
         else if (payload.unsubscribe) {
             LOG(user.uid + " unsubscribed from: " + user.room);
-            userActivities.findOneAndUpdate({ userid: uid, room: user.room }, { $set: { isPresent: false } });
+            userActivities.findOneAndUpdate({ user: uid, room: user.room }, { $set: { isPresent: false } });
             user.room = "Lobby";
         }
 

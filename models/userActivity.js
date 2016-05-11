@@ -4,7 +4,7 @@ var mongoose = require('mongoose'),
   ObjectId = Schema.ObjectId;
 
 var fields = {
-    userid: String,
+    user: String,
     room: String,
     visited: Date,
     isPresent: Boolean
