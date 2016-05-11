@@ -10,9 +10,9 @@
     "eventemitter3": "",
     "express": "",
     "lodash": "4.11.1",
+    "mongoose": "^4.4.16",
     "ws": ""
   },
- 
   "bundledDependencies": [
     "body-parser",
     "eventemitter3",

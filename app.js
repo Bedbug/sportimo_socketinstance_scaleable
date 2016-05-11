@@ -25,7 +25,31 @@
 
  */
 
-var _ = require('lodash');
+var _ = require('lodash'),
+    mongoose = require('mongoose'),
+    Schema = mongoose.Schema,
+    ObjectId = Schema.ObjectId;
+
+// Setup MongoDB conenction
+var mongoConnection = 'mongodb://bedbug:a21th21@ds027835.mongolab.com:27835/sportimov2';
+mongoose.connect(mongoConnection, function (err, res) {
+    if (err) {
+        console.log('ERROR connecting to: ' + mongoConnection + '. ' + err);
+    } else {
+        console.log("[Socket] MongoDB Connected.");
+    }
+});
+
+var fields = {
+    userid: String,
+    room: String,
+    visited: Date,
+    isPresent: Boolean
+};
+
+var schema = new Schema(fields);
+var userActivities = require('./models/userActivity');
+var userStats = require('./models/userStats');
 
 var InstId = process.env.SERVO_ID ? process.env.SERVO_ID : process.pid;
 
@@ -159,48 +183,48 @@ io.on('connection', function (socket) {
     var user;
     // console.log("Connected");
 
-    socket.on('register', function (data, callback) {
+    // socket.on('register', function (data, callback) {
 
-        user = findUser(data.uid);
-        // console.log(user);
+    //     user = findUser(data.uid);
+    //     // console.log(user);
 
-        if (!user) {
-            user = {
-                uid: data.uid,
-                uname: data.uname,
-                wss: socket
-            }
+    //     if (!user) {
+    //         user = {
+    //             uid: data.uid,
+    //             uname: data.uname,
+    //             wss: socket
+    //         }
 
-            if (data.admin) user.admin = true;
-            else user.admin = false;
+    //         if (data.admin) user.admin = true;
+    //         else user.admin = false;
 
-            instUsers.push(user);
-        }
+    //         instUsers.push(user);
+    //     }
 
-        var evtData =
-            {
-                sockets: true,
-                payload: {
-                    type: "user_subscribed",
-                    pid: InstId,
-                    uid: user.uid
-                }
-            }
+    //     var evtData =
+    //         {
+    //             sockets: true,
+    //             payload: {
+    //                 type: "user_subscribed",
+    //                 pid: InstId,
+    //                 uid: user.uid
+    //             }
+    //         }
 
-        PublishChannel.publish("socketServers", JSON.stringify(evtData));
-        LOG("A user with id: " + user.uid + " has registered in this sockets Instance.");
-    });
+    //     PublishChannel.publish("socketServers", JSON.stringify(evtData));
+    //     LOG("A user with id: " + user.uid + " has registered in this sockets Instance.");
+    // });
 
-    socket.on('subscribe', function (data, callback) {
-        user.room = data.room;
-        LOG(user.uid + " subscribed to:" + data.room);
-    });
+    // socket.on('subscribe', function (data, callback) {
+    //     user.room = data.room;
+    //     LOG(user.uid + " subscribed to:" + data.room);
+    // });
 
-    socket.on('unsubscribe', function (data) {
-        // Unregister user from match channel;
-        LOG(user.userID + " unsubscribed from:" + data.room);
-        user.channelID = 0;
-    });
+    // socket.on('unsubscribe', function (data) {
+    //     // Unregister user from match channel;
+    //     LOG(user.userID + " unsubscribed from:" + data.room);
+    //     user.channelID = 0;
+    // });
 
     socket.on('close', function () {
         LOG("Client disconected");
@@ -224,7 +248,7 @@ io.on('connection', function (socket) {
         if (payload.test) {
             console.log("Initiating Test:")
             setTimeout(function () {
-                 console.log("Start:")
+                console.log("Start:")
                 var evtData = {
                     sockets: true,
                     client: user.uid,
@@ -293,9 +317,14 @@ io.on('connection', function (socket) {
             // console.log(user);
             user.room = payload.subscribe.room;
             LOG(user.uid + " subscribed to:" + user.room);
+            
+            // Update Activities and Stats
+            userActivities.findOneAndUpdate({ userid: uid, room: user.room }, { $set: { visited: Date.now, isPresent: true } }, { upsert: true });
+            userStats.UpsertStat(uid ,{ matchesVisited: 1 }, null);
         }
         else if (payload.unsubscribe) {
             LOG(user.uid + " unsubscribed from: " + user.room);
+            userActivities.findOneAndUpdate({ userid: uid, room: user.room }, { $set: { isPresent: false } });
             user.room = "Lobby";
         }
 
