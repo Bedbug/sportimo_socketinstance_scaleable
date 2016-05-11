@@ -6,10 +6,13 @@ var mongoose = require('mongoose'),
 var fields = {
     user: String,
     room: String,
-    visited: Date,
+    lastActive: Date,
     isPresent: Boolean
 };
 
-var schema = new Schema(fields);
+var schema = new Schema(fields,
+{
+    timestamps: {updatedAt: 'lastActive' }
+});
 
-module.exports =  mongoose.model('userActivities', schema);
+module.exports =  mongoose.model('useractivities', schema);

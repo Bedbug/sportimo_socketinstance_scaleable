@@ -5,12 +5,12 @@ var mongoose = require('mongoose'),
 
 
 var fields = {
-    userid: String,
-    matchesVisited: Number,
-    matchesPlayed: Number,
-    cardsPlayed: Number,
-    cardsWon:Number,
-    prizesWon:Number
+    user: String,
+    matchesVisited: {type:Number, default:0},
+    matchesPlayed: {type:Number, default:0},
+    cardsPlayed: {type:Number, default:0},
+    cardsWon: {type:Number, default:0},
+    prizesWon: {type:Number, default:0}
 };
 var schema = new Schema(
     fields,
@@ -19,9 +19,9 @@ var schema = new Schema(
 });
 
 // Assign a method to create and increment stats
-schema.methods.UpsertStat = function (uid, statChange, cb) {
-  return this.model('userStats').findOneAndUpdate({ userid: uid }, { $set: { $inc: statChange } },{upsert:true}, cb);
+schema.statics.UpsertStat = function (uid, statChange, cb) {
+  return mongoose.model('userstats').findOneAndUpdate({ user: uid }, { $inc: statChange },{upsert:true}, cb);
 }
 
 
-module.exports =  mongoose.model('userStats', schema);
+module.exports =  mongoose.model('userstats', schema);

@@ -229,9 +229,10 @@ io.on('connection', function (socket) {
     socket.on('close', function () {
         LOG("Client disconected");
 
-        if (user)
+        if (user) {
+            userActivities.findOneAndUpdate({ user: user.uid, room: user.room }, { $set: { isPresent: false } }, function (err, result) { });
             removeUser(user);
-
+        }
     });
 
     socket.on("message", function (data) {
@@ -317,14 +318,28 @@ io.on('connection', function (socket) {
             // console.log(user);
             user.room = payload.subscribe.room;
             LOG(user.uid + " subscribed to:" + user.room);
-            
+
             // Update Activities and Stats
-            userActivities.findOneAndUpdate({ user: uid, room: user.room }, { $set: { visited: Date.now, isPresent: true } }, { upsert: true });
-            userStats.UpsertStat(uid ,{ matchesVisited: 1 }, null);
+            userActivities.findOneAndUpdate({ user: user.uid, room: user.room }, { $set: { isPresent: true } }, { upsert: true }, function (err, result) {
+                if (err)
+                    console.log(err);
+
+                if (!result) {
+                    userStats.UpsertStat(user.uid, { matchesVisited: 1 }, function (err, result) {
+                        console.log('Stat Update:');
+                        console.log(err);
+                        console.log(result);
+                    });
+                }
+            });
+
         }
         else if (payload.unsubscribe) {
             LOG(user.uid + " unsubscribed from: " + user.room);
-            userActivities.findOneAndUpdate({ user: uid, room: user.room }, { $set: { isPresent: false } });
+            userActivities.findOneAndUpdate({ user: user.uid, room: user.room }, { $set: { isPresent: false } }, function (err, result) {
+                if (err)
+                    console.log(err);
+            });
             user.room = "Lobby";
         }
 
@@ -349,6 +364,8 @@ var DisconnectUser = function (user) {
         client: user.uid,
         data: { "message": { "en": "You logged in from another device. We are sorry but you can only have one active connection." } }
     });
+
+
 
     user.wss.send(json);
     user.wss.close(1008, "Duplicate connection found");
