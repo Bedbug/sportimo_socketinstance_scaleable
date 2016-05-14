@@ -359,6 +359,10 @@ app.get('/', function (req, res, next) {
 var instUsers = [];
 
 var DisconnectUser = function (user) {
+    
+    // Disable it for now
+    return;
+    
     var json = JSON.stringify({
         type: "disconnect_user",
         client: user.uid,
