@@ -49,7 +49,8 @@ var fields = {
 
 var schema = new Schema(fields);
 var userActivities = require('./models/userActivity');
-var userStats = require('./models/userStats');
+var users = require('./models/user');
+var leaderboard = require('./models/score');
 
 var InstId = process.env.SERVO_ID ? process.env.SERVO_ID : process.pid;
 
@@ -96,7 +97,14 @@ redisclient.on("end", function () {
 redisclient.subscribe("socketServers");
 
 redisclient.on("message", function (channel, data) {
+    var objectdata = JSON.parse(data);
 
+    if (!objectdata.admin && !objectdata.server && (objectdata.payload.type == 'Card_won' || objectdata.payload.type == 'Card_lost')) {
+        console.log("---------------------------------------------------");
+        console.log("[REDIS]");
+        console.log(objectdata);
+        console.log("---------------------------------------------------");
+    }
     // Establishing payload
     var message = {};
     try {
@@ -114,14 +122,31 @@ redisclient.on("message", function (channel, data) {
     if (message.sockets) {
         var payload = message.payload;
 
-        // Is the payload directed to specific user?
-        if (payload.client) {
-            var evalUser = findUser(payload.client);
-            if (evaluser)
-                evalUser.wss.send(payload);
+
+        // Is the payload directed to specific user or users?
+        // if (message.client) {
+        //     // console.log("Sending a message to one client:"+message.client);
+        //     var evalUser = findUser(message.client);
+
+        //     if (evalUser) {
+        //         // console.log("Found him");
+        //         evalUser.wss.send(JSON.stringify(payload));
+        //     }
+        // } else 
+        if (message.clients) { // Loop all users
+            _.each(message.clients, function (client) {
+                if (client) {
+                    var evalUser = findUser(client);
+                     console.log("Sending a message to client:"+client);
+                    if (evalUser) {
+                           console.log("Found him");
+                        evalUser.wss.send(JSON.stringify(payload));
+                    }
+                }
+            })
         }
         else
-            io.broadcast(JSON.stringify(payload), message.admin);
+            io.broadcast(JSON.stringify(payload), message.admin, payload.room);
 
     }
     else {
@@ -165,11 +190,17 @@ function LOG(s) {
 var io = new WebSocketServer({ server: server });
 
 
-io.broadcast = function (data, admin) {
+io.broadcast = function (data, admin, room) {
+
+    // console.log(data);
 
     _.each(instUsers, function (user) {
         if (admin != null) {
             if (user.admin == admin)
+                user.wss.send(data);
+        }
+        else if (room) {
+            if (user.room == room || user.room == "Administration")
                 user.wss.send(data);
         }
         else
@@ -319,20 +350,25 @@ io.on('connection', function (socket) {
             user.room = payload.subscribe.room;
             LOG(user.uid + " subscribed to:" + user.room);
 
+            // Enter eladerboard entry with user data
+            leaderboard.AddLeaderboardEntry(user.uid, user.room);
+
             // Update Activities and Stats
             userActivities.findOneAndUpdate({ user: user.uid, room: user.room }, { $set: { isPresent: true } }, { upsert: true }, function (err, result) {
                 if (err)
                     console.log(err);
 
                 if (!result) {
-                    userStats.UpsertStat(user.uid, { matchesVisited: 1 }, function (err, result) {
-                        console.log('Stat Update:');
-                        console.log(err);
-                        console.log(result);
-                    });
-                }
-            });
+                    var stat = 'matchesVisited';
+                    var statsPath = {};
+                    statsPath['stats.' + stat] = 1;
 
+                    mongoose.model('users').findByIdAndUpdate(user.uid, { $inc: statsPath }, { upsert: true }, function (err, result) {
+                        if (err)
+                            console.log(err);
+                    });
+                };
+            });
         }
         else if (payload.unsubscribe) {
             LOG(user.uid + " unsubscribed from: " + user.room);
@@ -359,10 +395,10 @@ app.get('/', function (req, res, next) {
 var instUsers = [];
 
 var DisconnectUser = function (user) {
-    
+
     // Disable it for now
     return;
-    
+
     var json = JSON.stringify({
         type: "disconnect_user",
         client: user.uid,
