@@ -30,8 +30,13 @@ var _ = require('lodash'),
     Schema = mongoose.Schema,
     ObjectId = Schema.ObjectId;
 
+var mongoCreds = require('./config/mongoConfig');
+
 // Setup MongoDB conenction
-var mongoConnection = 'mongodb://bedbug:a21th21@ds027835.mongolab.com:27835/sportimov2';
+// var mongoConnection = 'mongodb://bedbug:a21th21@ds027835.mongolab.com:27835/sportimov2';
+
+var mongoConnection = 'mongodb://'+mongoCreds.user+':'+mongoCreds.password+'@'+mongoCreds.url;
+
 mongoose.connect(mongoConnection, function (err, res) {
     if (err) {
         console.log('ERROR connecting to: ' + mongoConnection + '. ' + err);
@@ -105,6 +110,9 @@ redisclient.on("message", function (channel, data) {
         console.log(objectdata);
         console.log("---------------------------------------------------");
     }
+    else
+     console.log(objectdata);
+
     // Establishing payload
     var message = {};
     try {
@@ -132,14 +140,14 @@ redisclient.on("message", function (channel, data) {
         //         // console.log("Found him");
         //         evalUser.wss.send(JSON.stringify(payload));
         //     }
-        // } else 
+        // } else
         if (message.clients) { // Loop all users
             _.each(message.clients, function (client) {
                 if (client) {
                     var evalUser = findUser(client);
-                     console.log("Sending a message to client:"+client);
+                    // console.log("Sending a message to client:" + client);
                     if (evalUser) {
-                           console.log("Found him");
+                        console.log("Found in instance. Sending a message to client:" + client);
                         evalUser.wss.send(JSON.stringify(payload));
                     }
                 }
@@ -197,11 +205,13 @@ io.broadcast = function (data, admin, room) {
     _.each(instUsers, function (user) {
         if (admin != null) {
             if (user.admin == admin)
-                user.wss.send(data);
+                if (user.wss)
+                    user.wss.send(data);
         }
         else if (room) {
             if (user.room == room || user.room == "Administration")
-                user.wss.send(data);
+                if (user.wss)
+                    user.wss.send(data);
         }
         else
             user.wss.send(data);
@@ -212,56 +222,12 @@ io.broadcast = function (data, admin, room) {
 io.on('connection', function (socket) {
 
     var user;
-    // console.log("Connected");
-
-    // socket.on('register', function (data, callback) {
-
-    //     user = findUser(data.uid);
-    //     // console.log(user);
-
-    //     if (!user) {
-    //         user = {
-    //             uid: data.uid,
-    //             uname: data.uname,
-    //             wss: socket
-    //         }
-
-    //         if (data.admin) user.admin = true;
-    //         else user.admin = false;
-
-    //         instUsers.push(user);
-    //     }
-
-    //     var evtData =
-    //         {
-    //             sockets: true,
-    //             payload: {
-    //                 type: "user_subscribed",
-    //                 pid: InstId,
-    //                 uid: user.uid
-    //             }
-    //         }
-
-    //     PublishChannel.publish("socketServers", JSON.stringify(evtData));
-    //     LOG("A user with id: " + user.uid + " has registered in this sockets Instance.");
-    // });
-
-    // socket.on('subscribe', function (data, callback) {
-    //     user.room = data.room;
-    //     LOG(user.uid + " subscribed to:" + data.room);
-    // });
-
-    // socket.on('unsubscribe', function (data) {
-    //     // Unregister user from match channel;
-    //     LOG(user.userID + " unsubscribed from:" + data.room);
-    //     user.channelID = 0;
-    // });
 
     socket.on('close', function () {
-        LOG("Client disconected");
 
         if (user) {
-            userActivities.findOneAndUpdate({ user: user.uid, room: user.room }, { $set: { isPresent: false } }, function (err, result) { });
+            userActivities.findOneAndUpdate({ user: user.uid, room: user.room }, { $set: { isPresent: false } }, function (err, result) {});
+            LOG("Client disconected: ["+user.uid+"] "+user.uname);
             removeUser(user);
         }
     });
@@ -299,12 +265,13 @@ io.on('connection', function (socket) {
         // If the request is for registration
         if (payload.register) {
 
-            var userExists = findUser(payload.register.uid);
+            if (!payload.register.admin) {
+                var userExists = findUser(payload.register.uid);
 
-            if (userExists) {
-                DisconnectUser(userExists);
+                if (userExists) {
+                    DisconnectUser(userExists);
+                }
             }
-
             var evtData = {
                 sockets: false,
                 payload: {
@@ -347,36 +314,51 @@ io.on('connection', function (socket) {
         }
         else if (payload.subscribe) {
             // console.log(user);
-            user.room = payload.subscribe.room;
-            LOG(user.uid + " subscribed to:" + user.room);
+            try {
 
-            // Enter eladerboard entry with user data
-            leaderboard.AddLeaderboardEntry(user.uid, user.room);
+                user.room = payload.subscribe.room;
+                LOG(user.uid + " subscribed to:" + user.room);
 
-            // Update Activities and Stats
-            userActivities.findOneAndUpdate({ user: user.uid, room: user.room }, { $set: { isPresent: true } }, { upsert: true }, function (err, result) {
-                if (err)
-                    console.log(err);
+                // Enter leaderboard entry with user data
+                leaderboard.AddLeaderboardEntry(user.uid, user.room);
 
-                if (!result) {
-                    var stat = 'matchesVisited';
-                    var statsPath = {};
-                    statsPath['stats.' + stat] = 1;
+                // Update Activities and Stats
+                users.findOneAndUpdate({ user: user.uid}, {$set:{ isOnline: true}},function(e,r){});
+                userActivities.findOneAndUpdate({ user: user.uid, room: user.room }, { $set: { isPresent: true } }, { upsert: true }, function (err, result) {
+                    if (err)
+                        console.log(err);
 
-                    mongoose.model('users').findByIdAndUpdate(user.uid, { $inc: statsPath }, { upsert: true }, function (err, result) {
-                        if (err)
-                            console.log(err);
-                    });
-                };
-            });
+                    if (!result) {
+                        var stat = 'matchesVisited';
+                        var statsPath = {};
+                        statsPath['stats.' + stat] = 1;
+
+                        mongoose.model('users').findByIdAndUpdate(user.uid, { $inc: statsPath }, { upsert: true }, function (err, result) {
+                            if (err)
+                                console.log(err);
+
+                            // console.log(result);
+                        });
+                    };
+                });
+            }
+            catch (err) {
+                console.log(err.stack);
+            }
         }
         else if (payload.unsubscribe) {
-            LOG(user.uid + " unsubscribed from: " + user.room);
-            userActivities.findOneAndUpdate({ user: user.uid, room: user.room }, { $set: { isPresent: false } }, function (err, result) {
-                if (err)
-                    console.log(err);
-            });
-            user.room = "Lobby";
+            try {
+                LOG(user.uid + " unsubscribed from: " + user.room);
+                users.findOneAndUpdate({ user: user.uid}, {$set:{ isOnline: false}},function(e,r){});
+                userActivities.findOneAndUpdate({ user: user.uid, room: user.room }, { $set: { isPresent: false } }, function (err, result) {
+                    if (err)
+                        console.log(err);
+                });
+                user.room = "Lobby";
+            }
+            catch (err) {
+                console.log(err.stack);
+            }
         }
 
     });
@@ -397,7 +379,7 @@ var instUsers = [];
 var DisconnectUser = function (user) {
 
     // Disable it for now
-    return;
+    // return;
 
     var json = JSON.stringify({
         type: "disconnect_user",

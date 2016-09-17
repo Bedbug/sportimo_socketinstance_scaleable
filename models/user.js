@@ -24,6 +24,7 @@ var UserSchema = new Schema({
         type: String,
         required: true
     },
+    isOnline: {type: Boolean},
     email: {
         type: String,
         required: true

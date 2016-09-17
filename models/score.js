@@ -40,9 +40,11 @@ scoreSchema.statics.AddLeaderboardEntry = function (uid, room) {
             pic: user.picture,
             user_name: user.username,
             game_id: room,
-            country: user.country,
-            level: user.level
+            country: user.country,            
         });
+
+        if(user.level)
+        score.level= user.level;
         
         score = score.toObject();
         delete score._id;
